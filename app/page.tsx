@@ -248,6 +248,8 @@ const PatientVisitApp: React.FC = () => {
                   <Image
                     src={photo.data}
                     alt={`Caricata ${index + 1}`}
+                    width={100}
+                    height={100}
                     className="w-full h-24 object-cover rounded"
                   />
                   <button
@@ -364,6 +366,8 @@ const PatientVisitApp: React.FC = () => {
                                       <Image
                                         src={photo.data}
                                         alt={`Visita ${index + 1}`}
+                                        width={300}
+                                        height={200}
                                         className="w-full h-32 sm:h-40 object-cover rounded"
                                       />
                                       {isEditMode && (

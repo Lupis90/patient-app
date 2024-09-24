@@ -1,11 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Altre configurazioni qui...
-
-  // Add this configuration to allow serving static files from the public folder
+  reactStrictMode: true,
   images: {
-    domains: ['localhost'],
+    domains: ['lh3.googleusercontent.com'], // Add any other domains you need
   },
-}
+  output: 'standalone',
+  }
 
 export default nextConfig;
