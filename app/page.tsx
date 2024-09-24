@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import Image from 'next/image';
 import Dexie from 'dexie';
 import GooglePhotosSelector from '@/components/GooglePhotosSelector';
 
@@ -244,7 +245,7 @@ const PatientVisitApp: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {newVisit.photos.map((photo, index) => (
                 <div key={index} className="relative">
-                  <img
+                  <Image
                     src={photo.data}
                     alt={`Caricata ${index + 1}`}
                     className="w-full h-24 object-cover rounded"
@@ -360,7 +361,7 @@ const PatientVisitApp: React.FC = () => {
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                   {selectedVisit.photos.map((photo, index) => (
                                     <div key={index} className="relative">
-                                      <img
+                                      <Image
                                         src={photo.data}
                                         alt={`Visita ${index + 1}`}
                                         className="w-full h-32 sm:h-40 object-cover rounded"
