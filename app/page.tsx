@@ -114,7 +114,13 @@ const PatientVisitApp: React.FC = () => {
         })
       )).then(photoData => {
         if (isEditMode && selectedVisit) {
-          setSelectedVisit(prev => ({ ...prev, photos: [...prev.photos, ...photoData] }));
+          setSelectedVisit(prev => {
+            if (prev) {
+              return { ...prev, photos: [...prev.photos, ...photoData] };
+            }
+            // If prev is null, return a new Visit object
+            return { date: '', photos: photoData };
+          });
         } else {
           setNewVisit(prev => ({ ...prev, photos: [...prev.photos, ...photoData] }));
         }
@@ -128,7 +134,12 @@ const PatientVisitApp: React.FC = () => {
       type: 'image/jpeg',
     }));
     if (isEditMode && selectedVisit) {
-      setSelectedVisit(prev => ({ ...prev, photos: [...prev.photos, ...photoData] }));
+      setSelectedVisit(prev => {
+        if (prev) {
+          return { ...prev, photos: [...prev.photos, ...photoData] };
+        }
+                return { date: '', photos: photoData };
+      });
     } else {
       setNewVisit(prev => ({ ...prev, photos: [...prev.photos, ...photoData] }));
     }
@@ -137,10 +148,15 @@ const PatientVisitApp: React.FC = () => {
 
   const removePhoto = (index: number) => {
     if (isEditMode && selectedVisit) {
-      setSelectedVisit(prev => ({
-        ...prev,
-        photos: prev.photos.filter((_, i) => i !== index)
-      }));
+      setSelectedVisit(prev => {
+        if (prev) {
+          return {
+            ...prev,
+            photos: prev.photos.filter((_, i) => i !== index)
+          };
+        }
+            return { date: '', photos: [] };
+      });
     } else {
       setNewVisit(prev => ({
         ...prev,
@@ -148,7 +164,6 @@ const PatientVisitApp: React.FC = () => {
       }));
     }
   };
-
   const addVisit = async () => {
     try {
       const { firstName, lastName, date, photos } = newVisit;
