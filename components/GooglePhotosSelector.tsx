@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
    import { useGoogleLogin } from '@react-oauth/google';
    import axios from 'axios';
    import { Button } from '@/components/ui/button';
-
+   import Image from 'next/image';
+   
    interface Photo {
      name: string;
      type: string;
@@ -109,7 +110,7 @@ import React, { useState, useEffect, useCallback } from 'react';
               }`}
               onClick={() => handlePhotoSelect(photo)}
             >
-              <img src={photo.baseUrl} alt="Google Photo" className="w-full h-32 object-cover" />
+              <Image src={photo.baseUrl} alt="Google Photo" className="w-full h-32 object-cover" />
             </div>
           ))}
         </div>
