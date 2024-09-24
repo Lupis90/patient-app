@@ -1,49 +1,52 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useGoogleLogin } from '@react-oauth/google';
-import axios from 'axios';
-import { Button } from '@/components/ui/button';
+   import { useGoogleLogin } from '@react-oauth/google';
+   import axios from 'axios';
+   import { Button } from '@/components/ui/button';
 
-interface Photo {
-  name: string;
-  type: string;
-  data: string;
-}
+   interface Photo {
+     name: string;
+     type: string;
+     data: string;
+   }
 
-interface GooglePhotosSelectorProps {
-  onPhotoSelect: (photos: Photo[]) => void;
-}
+   interface GooglePhotosSelectorProps {
+     onPhotoSelect: (photos: Photo[]) => void;
+   }
 
-const GooglePhotosSelector: React.FC<GooglePhotosSelectorProps> = ({ onPhotoSelect }) => {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [photos, setPhotos] = useState<Array<{ id: string; baseUrl: string }>>([]);
-  const [selectedPhotos, setSelectedPhotos] = useState<Array<{ id: string; baseUrl: string }>>([]);
-  const [isLoading, setIsLoading] = useState(false);
+   interface GooglePhotosResponse {
+     mediaItems?: Array<{ id: string; baseUrl: string }>;
+   }
 
-  const login = useGoogleLogin({
-    onSuccess: (tokenResponse) => {
-      console.log("Login successful, token:", tokenResponse.access_token);
-      setAccessToken(tokenResponse.access_token);
-    },
-    onError: (error) => console.error("Login Failed:", error),
-    scope: 'https://www.googleapis.com/auth/photoslibrary.readonly',
-  });
+   const GooglePhotosSelector: React.FC<GooglePhotosSelectorProps> = ({ onPhotoSelect }) => {
+     const [accessToken, setAccessToken] = useState<string | null>(null);
+     const [photos, setPhotos] = useState<Array<{ id: string; baseUrl: string }>>([]);
+     const [selectedPhotos, setSelectedPhotos] = useState<Array<{ id: string; baseUrl: string }>>([]);
+     const [isLoading, setIsLoading] = useState(false);
 
-  const fetchPhotos = useCallback(async () => {
-    if (!accessToken) return;
-    setIsLoading(true);
-    try {
-      const response = await axios.get('https://photoslibrary.googleapis.com/v1/mediaItems', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        params: { pageSize: 50 },
-      });
-      setPhotos(response.data.mediaItems || []);
-    } catch (error) {
-      console.error('Error fetching photos:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [accessToken]);
+     const login = useGoogleLogin({
+       onSuccess: (tokenResponse) => {
+         console.log("Login successful, token:", tokenResponse.access_token);
+         setAccessToken(tokenResponse.access_token);
+       },
+       onError: (error) => console.error("Login Failed:", error),
+       scope: 'https://www.googleapis.com/auth/photoslibrary.readonly',
+     });
 
+     const fetchPhotos = useCallback(async () => {
+       if (!accessToken) return;
+       setIsLoading(true);
+       try {
+         const response = await axios.get<GooglePhotosResponse>('https://photoslibrary.googleapis.com/v1/mediaItems', {
+           headers: { Authorization: `Bearer ${accessToken}` },
+           params: { pageSize: 50 },
+         });
+         setPhotos(response.data.mediaItems || []);
+       } catch (error) {
+         console.error('Error fetching photos:', error);
+       } finally {
+         setIsLoading(false);
+       }
+     }, [accessToken]);
   useEffect(() => {
     if (accessToken) {
       fetchPhotos();

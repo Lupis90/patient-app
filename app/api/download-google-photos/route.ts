@@ -23,7 +23,8 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      const buffer = Buffer.from(response.data);
+      // Explicitly type response.data as Buffer
+      const buffer = Buffer.from(response.data as Buffer);
       const base64Data = buffer.toString('base64');
 
       downloadedPhotos.push({
