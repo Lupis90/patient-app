@@ -1,6 +1,7 @@
 import './globals.css'
 import { Inter } from 'next/font/google'
 import { GoogleOAuthProvider } from '@react-oauth/google'
+import ServiceWorkerRegistration from '../components/ServiceWorkerRegistration'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -24,6 +25,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <GoogleOAuthProvider clientId={clientId}>
+          <ServiceWorkerRegistration />
           {children}
         </GoogleOAuthProvider>
       </body>

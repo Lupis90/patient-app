@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Camera, Calendar, Users, ChevronUp, ChevronDown, X, ChevronRight, ChevronDown as ChevronDownFold, Bell, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -85,13 +85,39 @@ const PatientVisitApp: React.FC = () => {
     }
   };
 
-  const isLastVisitOld = (visits: Visit[]) => {
-    if (visits.length === 0) return false;
+  const isLastVisitOld = (visits: Visit[]): { isOld: boolean; lastVisitDate?: string } => {
+    if (visits.length === 0) return { isOld: false };
+    
     const lastVisitDate = new Date(visits[visits.length - 1].date);
     const twoWeeksAgo = new Date();
     twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-    return lastVisitDate < twoWeeksAgo;
+    
+    if (lastVisitDate < twoWeeksAgo) {
+      return { isOld: true, lastVisitDate: lastVisitDate.toISOString().split('T')[0] };
+    }
+    
+    return { isOld: false };
   };
+
+  const sendNotification = useCallback(async (patientName: string, lastVisitDate: string) => {
+    if (!('Notification' in window)) {
+      console.log('This browser does not support notifications');
+      return;
+    }
+  
+    if (Notification.permission === 'granted') {
+      const registration = await navigator.serviceWorker.ready;
+      const title = 'Promemoria Visita Paziente';
+      const body = `${patientName} non ha visite da ${lastVisitDate}. Potrebbe essere necessario un controllo.`;
+      
+      await registration.showNotification(title, { body });
+    } else if (Notification.permission !== 'denied') {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        await sendNotification(patientName, lastVisitDate);
+      }
+    }
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -242,6 +268,57 @@ const PatientVisitApp: React.FC = () => {
     }
   };
 
+  const registerServiceWorker = async () => {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      try {
+        const registration = await navigator.serviceWorker.register('/service-worker.js');
+        console.log('Service Worker registered successfully:', registration);
+  
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+          });
+  
+          // Send the subscription to your server
+          const response = await fetch('/api/register-push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(subscription)
+          });
+  
+          if (response.ok) {
+            console.log('User subscribed to push notifications');
+          } else {
+            console.error('Failed to register push subscription');
+          }
+        }
+      } catch (error) {
+        console.error('Error during Service Worker registration:', error);
+      }
+    }
+  };
+  
+  // Call this function when the app starts
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
+
+
+  useEffect(() => {
+    const checkForOldVisits = async () => {
+      patients.forEach(patient => {
+        const { isOld, lastVisitDate } = isLastVisitOld(patient.visits);
+        if (isOld && lastVisitDate) {
+          sendNotification(`${patient.firstName} ${patient.lastName}`, lastVisitDate);
+        }
+      });
+    };
+
+    checkForOldVisits();
+  }, [patients, sendNotification]);
+
   const togglePatientExpansion = (patientId: number) => {
     setExpandedPatients(prev => {
       const newSet = new Set(prev);
@@ -360,26 +437,29 @@ const PatientVisitApp: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {sortedPatients.map((patient) => (
-                  <React.Fragment key={patient.id}>
-                    <tr>
-                      <td className="p-2">
-                        {patient.lastName}
-                        {isLastVisitOld(patient.visits) && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <Bell className="inline-block ml-2 text-yellow-500" size={16} />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Ultima visita più di due settimane fa</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                      </td>
-                      <td className="p-2">{patient.firstName}</td>
-                      <td className="p-2">{patient.visits.length}</td>
+              {sortedPatients.map((patient) => {
+                  const { isOld, lastVisitDate } = isLastVisitOld(patient.visits);
+                  return (
+                    <React.Fragment key={patient.id}>
+                      <tr>
+                        <td className="p-2">
+                          {patient.lastName}
+                          {isOld && lastVisitDate && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Bell className="inline-block ml-2 text-yellow-500" size={16} />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Ultima visita: {lastVisitDate}</p>
+                                  <p>Più di due settimane fa</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </td>
+                        <td className="p-2">{patient.firstName}</td>
+                        <td className="p-2">{patient.visits.length}</td>
                       <td className="p-2 flex items-center space-x-2">
                         <Button variant="outline" onClick={() => togglePatientExpansion(patient.id!)}>
                           {expandedPatients.has(patient.id!) ? <ChevronDownFold /> : <ChevronRight />}
@@ -528,7 +608,8 @@ const PatientVisitApp: React.FC = () => {
                       </tr>
                     ))}
                   </React.Fragment>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -536,6 +617,6 @@ const PatientVisitApp: React.FC = () => {
       </Card>
     </div>
   );
-}
+};
 
 export default PatientVisitApp;
