@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-
+import Image from 'next/image';
 interface Visit {
   id: number;
   patientName: string;
@@ -138,7 +138,7 @@ const PatientVisitApp: React.FC = () => {
                               <p><strong>Patient:</strong> {selectedVisit.patientName}</p>
                               <p><strong>Date:</strong> {selectedVisit.date}</p>
                               {selectedVisit.photo && (
-                                <img
+                                <Image
                                   src={URL.createObjectURL(selectedVisit.photo)}
                                   alt="Visit"
                                   className="mt-2 max-w-full h-auto"
