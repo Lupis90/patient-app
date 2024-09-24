@@ -138,11 +138,13 @@ const PatientVisitApp: React.FC = () => {
                               <p><strong>Patient:</strong> {selectedVisit.patientName}</p>
                               <p><strong>Date:</strong> {selectedVisit.date}</p>
                               {selectedVisit.photo && (
-                                <Image
-                                  src={URL.createObjectURL(selectedVisit.photo)}
-                                  alt="Visit"
-                                  className="mt-2 max-w-full h-auto"
-                                />
+                               <Image
+                               src={photo.data}
+                               alt={`Uploaded ${index + 1}`}
+                               width={100}
+                               height={100}
+                               className="w-full h-24 object-cover rounded"
+                             />
                               )}
                             </div>
                           )}
