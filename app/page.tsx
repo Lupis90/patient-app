@@ -227,14 +227,17 @@ const PatientVisitApp: React.FC = () => {
               />
             </div>
             <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2">
-              <Camera className="mr-2" />
-              <Input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handlePhotoUpload}
-                className="w-full"
-              />
+            <Camera className="mr-2" />
+              <label className="cursor-pointer bg-white border border-gray-300 rounded-md py-2 px-4 w-full text-sm text-gray-500 hover:bg-gray-50">
+                <span>Clicca qui per aggiungere Foto</span>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+              </label>
               <Button onClick={() => setShowGooglePhotosSelector(true)} className="w-full sm:w-auto">
                 Seleziona da Google Photos
               </Button>

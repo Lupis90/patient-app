@@ -108,12 +108,16 @@ const PatientVisitApp: React.FC = () => {
             </div>
             <div className="flex items-center">
               <Camera className="mr-2" />
-              <Input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handlePhotoUpload}
-              />
+              <label className="cursor-pointer bg-white border border-gray-300 rounded-md py-2 px-4 w-full text-sm text-gray-500 hover:bg-gray-50">
+                <span>Clicca qui per aggiungere Foto</span>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+              </label>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {newVisit.photos.map((photo, index) => (
