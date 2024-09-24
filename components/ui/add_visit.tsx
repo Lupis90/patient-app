@@ -1,20 +1,27 @@
 import React, { useState, useMemo } from 'react';
-import { Camera, Calendar, Users, ChevronUp, ChevronDown} from 'lucide-react';
+import { Camera, Calendar, Users, ChevronUp, ChevronDown, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import Image from 'next/image';
+
+interface Photo {
+  name: string;
+  type: string;
+  data: string;
+}
+
 interface Visit {
   id: number;
   patientName: string;
   date: string;
-  photo: File | null;
+  photos: Photo[];
 }
 
 const PatientVisitApp: React.FC = () => {
   const [visits, setVisits] = useState<Visit[]>([]);
-  const [newVisit, setNewVisit] = useState<Visit>({ id: 0, patientName: '', date: '', photo: null });
+  const [newVisit, setNewVisit] = useState<Visit>({ id: 0, patientName: '', date: '', photos: [] });
   const [sortField, setSortField] = useState<keyof Visit>('patientName');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
@@ -24,15 +31,25 @@ const PatientVisitApp: React.FC = () => {
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setNewVisit({ ...newVisit, photo: e.target.files[0] });
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      Promise.all(files.map(file => 
+        new Promise<Photo>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve({ name: file.name, type: file.type, data: reader.result as string });
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        })
+      )).then(photoData => {
+        setNewVisit(prev => ({ ...prev, photos: [...prev.photos, ...photoData] }));
+      });
     }
   };
 
   const addVisit = () => {
     const visit: Visit = { ...newVisit, id: Date.now() };
     setVisits([...visits, visit]);
-    setNewVisit({ id: 0, patientName: '', date: '', photo: null });
+    setNewVisit({ id: 0, patientName: '', date: '', photos: [] });
   };
 
   const handleSort = (field: keyof Visit) => {
@@ -53,6 +70,13 @@ const PatientVisitApp: React.FC = () => {
       return 0;
     });
   }, [visits, sortField, sortDirection]);
+
+  const removePhoto = (index: number) => {
+    setNewVisit(prev => ({
+      ...prev,
+      photos: prev.photos.filter((_, i) => i !== index)
+    }));
+  };
 
   return (
     <div className="max-w-4xl mx-auto p-4">
@@ -87,8 +111,28 @@ const PatientVisitApp: React.FC = () => {
               <Input
                 type="file"
                 accept="image/*"
+                multiple
                 onChange={handlePhotoUpload}
               />
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {newVisit.photos.map((photo, index) => (
+                <div key={index} className="relative">
+                  <Image
+                    src={photo.data}
+                    alt={`Uploaded ${index + 1}`}
+                    width={100}
+                    height={100}
+                    className="w-full h-24 object-cover rounded"
+                  />
+                  <button
+                    onClick={() => removePhoto(index)}
+                    className="absolute top-0 right-0 bg-red-500 text-white rounded-full p-1"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
             </div>
             <Button onClick={addVisit} className="w-full">Add Visit</Button>
           </div>
@@ -116,6 +160,7 @@ const PatientVisitApp: React.FC = () => {
                       {sortField === 'date' && (sortDirection === 'asc' ? <ChevronUp className="inline ml-1" /> : <ChevronDown className="inline ml-1" />)}
                     </Button>
                   </th>
+                  <th className="text-left p-2">Photos</th>
                   <th className="text-left p-2">Actions</th>
                 </tr>
               </thead>
@@ -124,6 +169,7 @@ const PatientVisitApp: React.FC = () => {
                   <tr key={visit.id}>
                     <td className="p-2">{visit.patientName}</td>
                     <td className="p-2">{visit.date}</td>
+                    <td className="p-2">{visit.photos.length}</td>
                     <td className="p-2">
                       <Dialog>
                         <DialogTrigger asChild>
@@ -137,15 +183,21 @@ const PatientVisitApp: React.FC = () => {
                             <div>
                               <p><strong>Patient:</strong> {selectedVisit.patientName}</p>
                               <p><strong>Date:</strong> {selectedVisit.date}</p>
-                              {selectedVisit.photo && (
-                               <Image
-                               src={photo.data}
-                               alt={`Uploaded ${index + 1}`}
-                               width={100}
-                               height={100}
-                               className="w-full h-24 object-cover rounded"
-                             />
-                              )}
+                              <div className="mt-4">
+                                <h3 className="font-semibold mb-2">Photos:</h3>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {selectedVisit.photos.map((photo, index) => (
+                                    <Image
+                                      key={index}
+                                      src={photo.data}
+                                      alt={`Visit ${index + 1}`}
+                                      width={200}
+                                      height={150}
+                                      className="w-full h-32 object-cover rounded"
+                                    />
+                                  ))}
+                                </div>
+                              </div>
                             </div>
                           )}
                         </DialogContent>
