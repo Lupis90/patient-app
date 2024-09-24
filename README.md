@@ -1,4 +1,4 @@
-# Patient Visit Tracker
+# Patient Visit Tracker v1.1
 
 Patient Visit Tracker is a Next.js application designed to help healthcare professionals manage patient visits and associated photos. It provides an intuitive interface for adding, viewing, and managing patient records and their visit history.
 
