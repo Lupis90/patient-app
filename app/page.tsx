@@ -50,6 +50,7 @@ const PatientVisitApp: React.FC = () => {
   const [expandedPatients, setExpandedPatients] = useState<Set<number>>(new Set());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [localLoading, setLocalLoading] = useState(false);
+  const [operationInProgress, setOperationInProgress] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -59,8 +60,12 @@ const PatientVisitApp: React.FC = () => {
     fetchUser();
   }, []);
 
-  useEffect(() => {
+    useEffect(() => {
+    let isMounted = true;
     const loadPatients = async () => {
+      if (!user) return;
+
+      setLocalLoading(true);
       try {
         const { data: patientsData, error: patientsError } = await supabase
           .from('patients')
@@ -79,17 +84,25 @@ const PatientVisitApp: React.FC = () => {
           visits: visitsData.filter((visit: Visit) => visit.patient_id === patient.id)
         }));
 
-        setPatients(patientsWithVisits);
+        if (isMounted) {
+          setPatients(patientsWithVisits);
+        }
       } catch (error) {
         console.error("Error loading data:", error);
-        // Here you might want to set an error state and display it to the user
       } finally {
-         }
+        if (isMounted) {
+          setLocalLoading(false);
+        }
+      }
     };
 
     if (user) {
       loadPatients();
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [user, refreshTrigger]);
 
 
@@ -113,8 +126,8 @@ const PatientVisitApp: React.FC = () => {
   };
 
   const deletePatient = async (patientId: number) => {
+    setOperationInProgress(true);
     try {
-      setLocalLoading(true);
       const { error: visitsError } = await supabase
         .from('visits')
         .delete()
@@ -132,9 +145,8 @@ const PatientVisitApp: React.FC = () => {
       setRefreshTrigger(prev => prev + 1);
     } catch (error) {
       console.error("Error deleting patient:", error);
-      // Here you might want to show an error message to the user
     } finally {
-      setLocalLoading(false);
+      setOperationInProgress(false);
     }
   };
 
@@ -250,6 +262,7 @@ const PatientVisitApp: React.FC = () => {
     }
 
     setIsAddingVisit(true);
+    setOperationInProgress(true);
 
     try {
       const { firstName, lastName, date, photos } = newVisit;
@@ -314,15 +327,15 @@ const PatientVisitApp: React.FC = () => {
       setRefreshTrigger(prev => prev + 1);
     } catch (error) {
       console.error("Error adding visit:", error);
-      // Here you might want to show an error message to the user
     } finally {
       setIsAddingVisit(false);
+      setOperationInProgress(false);
     }
   };
 
-
   const updateVisit = async () => {
     if (selectedPatient && selectedVisit) {
+      setOperationInProgress(true);
       try {
         const { error } = await supabase
           .from('visits')
@@ -337,7 +350,8 @@ const PatientVisitApp: React.FC = () => {
         setSelectedPatient(null);
       } catch (error) {
         console.error("Error updating visit:", error);
-        // Here you might want to show an error message to the user
+      } finally {
+        setOperationInProgress(false);
       }
     }
   };
@@ -362,6 +376,7 @@ const PatientVisitApp: React.FC = () => {
   }, [patients, sortField, sortDirection]);
 
   const deleteVisit = async (patientId: number, visitDate: string) => {
+    setOperationInProgress(true);
     try {
       const { error } = await supabase
         .from('visits')
@@ -375,9 +390,11 @@ const PatientVisitApp: React.FC = () => {
       setIsEditMode(false);
     } catch (error) {
       console.error("Error deleting visit:", error);
-      // Here you might want to show an error message to the user
+    } finally {
+      setOperationInProgress(false);
     }
   };
+
 
   const registerServiceWorker = async () => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
@@ -463,6 +480,10 @@ const PatientVisitApp: React.FC = () => {
       return newSet;
     });
   };
+
+  useEffect(() => {
+    setLocalLoading(operationInProgress);
+  }, [operationInProgress]);
 
   return (
     <div className="max-w-4xl mx-auto p-4">
