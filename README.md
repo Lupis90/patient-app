@@ -1,94 +1,96 @@
-# Patient Visit Tracker v1.1
+# Patient Visit Tracker - Application Architecture
 
-Patient Visit Tracker is a Next.js application designed to help healthcare professionals manage patient visits and associated photos. It provides an intuitive interface for adding, viewing, and managing patient records and their visit history.
+## 1. Frontend Components
 
-## Features
+### Main Components
+- `PatientVisitApp`: Core component managing state and UI rendering
+- `GooglePhotosSelector`: Handles photo selection from Google Photos
+- `LoginPage`: Manages user authentication
 
-- Add new patients and record their visits
-- Upload and manage photos for each visit
-- Integration with Google Photos for easy photo selection
-- Sort and filter patient records
-- Edit and delete patient visits
-- Responsive design for desktop and mobile use
-- Offline-capable with IndexedDB storage
+### UI Components
+- `Card`, `Button`, `Input`, `Dialog`: Reusable UI components
+- `LoadingSpinner`, `LoadingSpinnerW`: Loading indicators
 
-## Technologies Used
+## 2. Backend Services
 
-- Next.js 14.x.x (App Router)
-- React
-- TypeScript
-- Tailwind CSS
-- Lucide React (for icons)
-- Dexie.js (for IndexedDB)
-- @react-oauth/google (for Google Photos integration)
+### Supabase Integration
+- Authentication
+- Database for storing patient and visit data
+- Real-time data synchronization
 
-## Prerequisites
+### API Routes
+- `/api/register-push`: Registers push subscriptions
+- `/api/send-notification`: Sends push notifications
+- `/api/servePhotos`: Serves stored photos
+- `/api/download-google-photos`: Handles Google Photos download
 
-- Node.js (version 14 or later)
-- npm or yarn
+## 3. External Integrations
 
-## Setup
+- Google OAuth: For Google Photos access
+- Web Push API: For sending notifications
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/your-username/patient-visit-tracker.git
-   cd patient-visit-tracker
-   ```
+## 4. Data Models
 
-2. Install dependencies:
-   ```
-   npm install
-   ```
-   or
-   ```
-   yarn install
-   ```
+### Patient
+- `id`: unique identifier
+- `first_name`: string
+- `last_name`: string
+- `user_id`: reference to authenticated user
 
-3. Set up environment variables:
-   Create a `.env.local` file in the root directory and add the following:
-   ```
-   NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
-   ```
-   Replace `your_google_client_id` with your actual Google Client ID.
+### Visit
+- `id`: unique identifier
+- `patient_id`: reference to Patient
+- `date`: date string
+- `photos`: array of Photo objects
 
-4. Run the development server:
-   ```
-   npm run dev
-   ```
-   or
-   ```
-   yarn dev
-   ```
+### Photo
+- `name`: string
+- `type`: string
+- `data`: base64 encoded string
 
-5. Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
+## 5. Key Features
 
-## Project Structure
+- User authentication and authorization
+- CRUD operations for patients and visits
+- Photo management (upload, view, delete)
+- Google Photos integration
+- Push notifications for visit reminders
+- Responsive design for mobile and desktop
 
-- `/app`: Contains the main application pages and components
-- `/components`: Reusable React components
-- `/public`: Static assets
-- `/styles`: Global styles and Tailwind CSS configuration
+## 6. File Structure
 
-## Key Components
+```
+/app
+  /api
+    /download-google-photos
+    /register-push
+    /send-notification
+    /servePhotos
+  /login
+  page.tsx
+  layout.tsx
+  middleware.ts
+/components
+  GooglePhotosSelector.tsx
+  LoadingSpinner.tsx
+  LoadingSpinnerW.tsx
+  ServiceWorkerRegistration.tsx
+/lib
+  supabaseClient.ts
+/public
+  service-worker.js
+/styles
+  globals.css
+```
 
-- `PatientVisitApp`: The main component that manages the state and renders the UI
-- `GooglePhotosSelector`: Component for selecting photos from Google Photos
-- `PatientVisitsDB`: Dexie.js database class for managing patient data
+## 7. State Management
 
-## Deployment
+- React's useState and useEffect for local state
+- Supabase for server-side state and real-time updates
 
-To deploy the application, you can use Vercel, which is optimized for Next.js projects:
+## 8. Security Measures
 
-1. Push your code to a GitHub repository
-2. Connect your repository to Vercel
-3. Vercel will automatically deploy your application
-
-For other deployment options, refer to the [Next.js deployment documentation](https://nextjs.org/docs/deployment).
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License.
+- Supabase authentication
+- Server-side validation of user permissions
+- Secure handling of sensitive patient data
+- HTTPS for all communications
