@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import LoadingSpinner from '@/components/LoadingSpinner'; 
 import LoadingSpinnerW from '@/components/LoadingSpinnerW';
+import { User } from '@supabase/supabase-js';
 
 interface Photo {
   name: string;
@@ -36,9 +37,8 @@ interface Patient {
 
 const PatientVisitApp: React.FC = () => {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
   const [isAddingVisit, setIsAddingVisit] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [newVisit, setNewVisit] = useState<{ firstName: string; lastName: string; date: string; photos: Photo[] }>({ firstName: '', lastName: '', date: '', photos: [] });
   const [sortField, setSortField] = useState<keyof Patient>('last_name');
@@ -55,15 +55,13 @@ const PatientVisitApp: React.FC = () => {
     const fetchUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
-      setLoading(false);
-    };
+          };
     fetchUser();
   }, []);
 
   useEffect(() => {
     const loadPatients = async () => {
       try {
-        setLoading(true);
         const { data: patientsData, error: patientsError } = await supabase
           .from('patients')
           .select('*');
@@ -86,8 +84,7 @@ const PatientVisitApp: React.FC = () => {
         console.error("Error loading data:", error);
         // Here you might want to set an error state and display it to the user
       } finally {
-        setLoading(false);
-      }
+         }
     };
 
     if (user) {
@@ -260,7 +257,7 @@ const PatientVisitApp: React.FC = () => {
       console.log("Attempting to add visit with data:", { firstName, lastName, date, photosCount: photos.length });
 
       // Check if patient exists
-      let { data: existingPatients, error: patientError } = await supabase
+      const { data: existingPatients, error: patientError } = await supabase
         .from('patients')
         .select('id')
         .eq('first_name', firstName)
@@ -439,8 +436,8 @@ const PatientVisitApp: React.FC = () => {
 
       if (session) {
         setUser(session.user);
-        setLoading(false);
-      } else {
+      } 
+      else {
         // If no user is logged in, redirect to login
         router.push('/login');
       }
@@ -473,7 +470,7 @@ const PatientVisitApp: React.FC = () => {
       
       {/* Display User Info */}
       <div className="fixed top-0 left-0 right-0 bg-gray-800 text-white p-4 flex justify-between items-center">
-        <p>Logged in as: {user?.email}</p>
+      <p>Logged in as: {user?.email}</p>
         <button onClick={handleLogout} className="bg-red-500 px-4 py-2 rounded">
           Logout
         </button>
