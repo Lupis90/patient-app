@@ -8,8 +8,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import Image from 'next/image';
-import Dexie from 'dexie';
 import GooglePhotosSelector from '@/components/GooglePhotosSelector';
+import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
+import LoadingSpinner from '@/components/LoadingSpinner'; 
+import LoadingSpinnerW from '@/components/LoadingSpinnerW';
+import { User } from '@supabase/supabase-js';
 
 interface Photo {
   name: string;
@@ -19,34 +23,25 @@ interface Photo {
 
 interface Visit {
   id?: number;
+  patient_id: number;
   date: string;
   photos: Photo[];
 }
 
 interface Patient {
   id?: number;
-  firstName: string;
-  lastName: string;
+  first_name: string;
+  last_name: string;
   visits: Visit[];
 }
 
-class PatientVisitsDB extends Dexie {
-  patients!: Dexie.Table<Patient, number>;
-
-  constructor() {
-    super('PatientVisitsDB');
-    this.version(3).stores({
-      patients: '++id, firstName, lastName'
-    });
-  }
-}
-
-const db = new PatientVisitsDB();
-
 const PatientVisitApp: React.FC = () => {
+  const router = useRouter();
+  const [isAddingVisit, setIsAddingVisit] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [newVisit, setNewVisit] = useState<{ firstName: string; lastName: string; date: string; photos: Photo[] }>({ firstName: '', lastName: '', date: '', photos: [] });
-  const [sortField, setSortField] = useState<keyof Patient>('lastName');
+  const [sortField, setSortField] = useState<keyof Patient>('last_name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
@@ -54,34 +49,92 @@ const PatientVisitApp: React.FC = () => {
   const [showGooglePhotosSelector, setShowGooglePhotosSelector] = useState(false);
   const [expandedPatients, setExpandedPatients] = useState<Set<number>>(new Set());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [localLoading, setLocalLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+          };
+    fetchUser();
+  }, []);
 
   useEffect(() => {
     const loadPatients = async () => {
-      const allPatients = await db.patients.toArray();
-      setPatients(allPatients);
+      try {
+        const { data: patientsData, error: patientsError } = await supabase
+          .from('patients')
+          .select('*');
+
+        if (patientsError) throw patientsError;
+
+        const { data: visitsData, error: visitsError } = await supabase
+          .from('visits')
+          .select('*');
+
+        if (visitsError) throw visitsError;
+
+        const patientsWithVisits = patientsData.map((patient: Patient) => ({
+          ...patient,
+          visits: visitsData.filter((visit: Visit) => visit.patient_id === patient.id)
+        }));
+
+        setPatients(patientsWithVisits);
+      } catch (error) {
+        console.error("Error loading data:", error);
+        // Here you might want to set an error state and display it to the user
+      } finally {
+         }
     };
-    loadPatients();
-  }, [refreshTrigger]);
+
+    if (user) {
+      loadPatients();
+    }
+  }, [user, refreshTrigger]);
+
 
   const mainDeleteVisit = async (patientId: number, visitDate: string) => {
     try {
-      const patient = patients.find(p => p.id === patientId);
-      if (patient) {
-        patient.visits = patient.visits.filter(v => v.date !== visitDate);
-        await db.patients.put(patient);
-        setRefreshTrigger(prev => prev + 1);
-      }
+      setLocalLoading(true);
+      const { error } = await supabase
+        .from('visits')
+        .delete()
+        .match({ patient_id: patientId, date: visitDate });
+
+      if (error) throw error;
+
+      setRefreshTrigger(prev => prev + 1);
     } catch (error) {
-      console.error("Errore nell'eliminazione della visita:", error);
+      console.error("Error deleting visit:", error);
+      // Here you might want to show an error message to the user
+    } finally {
+      setLocalLoading(false);
     }
   };
 
   const deletePatient = async (patientId: number) => {
     try {
-      await db.patients.delete(patientId);
+      setLocalLoading(true);
+      const { error: visitsError } = await supabase
+        .from('visits')
+        .delete()
+        .match({ patient_id: patientId });
+
+      if (visitsError) throw visitsError;
+
+      const { error: patientError } = await supabase
+        .from('patients')
+        .delete()
+        .match({ id: patientId });
+
+      if (patientError) throw patientError;
+
       setRefreshTrigger(prev => prev + 1);
     } catch (error) {
-      console.error("Errore nell'eliminazione del paziente:", error);
+      console.error("Error deleting patient:", error);
+      // Here you might want to show an error message to the user
+    } finally {
+      setLocalLoading(false);
     }
   };
 
@@ -144,8 +197,7 @@ const PatientVisitApp: React.FC = () => {
             if (prev) {
               return { ...prev, photos: [...prev.photos, ...photoData] };
             }
-            // If prev is null, return a new Visit object
-            return { date: '', photos: photoData };
+            return { patient_id: 0, date: '', photos: photoData };
           });
         } else {
           setNewVisit(prev => ({ ...prev, photos: [...prev.photos, ...photoData] }));
@@ -164,7 +216,7 @@ const PatientVisitApp: React.FC = () => {
         if (prev) {
           return { ...prev, photos: [...prev.photos, ...photoData] };
         }
-                return { date: '', photos: photoData };
+        return { patient_id: 0, date: '', photos: photoData };
       });
     } else {
       setNewVisit(prev => ({ ...prev, photos: [...prev.photos, ...photoData] }));
@@ -181,7 +233,7 @@ const PatientVisitApp: React.FC = () => {
             photos: prev.photos.filter((_, i) => i !== index)
           };
         }
-            return { date: '', photos: [] };
+        return { patient_id: 0, date: '', photos: [] };
       });
     } else {
       setNewVisit(prev => ({
@@ -190,26 +242,81 @@ const PatientVisitApp: React.FC = () => {
       }));
     }
   };
+
   const addVisit = async () => {
+    if (!user) {
+      console.error("User not authenticated");
+      return;
+    }
+
+    setIsAddingVisit(true);
+
     try {
       const { firstName, lastName, date, photos } = newVisit;
-      let patient = patients.find(p => p.firstName === firstName && p.lastName === lastName);
       
-      if (!patient) {
-        patient = { firstName, lastName, visits: [] };
-        const id = await db.patients.add(patient);
-        patient.id = id;
+      console.log("Attempting to add visit with data:", { firstName, lastName, date, photosCount: photos.length });
+
+      // Check if patient exists
+      const { data: existingPatients, error: patientError } = await supabase
+        .from('patients')
+        .select('id')
+        .eq('first_name', firstName)
+        .eq('last_name', lastName)
+        .eq('user_id', user.id);
+
+      if (patientError) {
+        console.error("Error checking existing patients:", patientError);
+        throw patientError;
       }
 
-      const newVisitObj: Visit = { date, photos };
-      patient.visits.push(newVisitObj);
+      console.log("Existing patients:", existingPatients);
 
-      await db.patients.put(patient);
+      let patientId;
+
+      if (existingPatients && existingPatients.length > 0) {
+        patientId = existingPatients[0].id;
+        console.log("Using existing patient with ID:", patientId);
+      } else {
+        console.log("Creating new patient");
+        // Create new patient
+        const { data: newPatient, error: newPatientError } = await supabase
+          .from('patients')
+          .insert({ 
+            user_id: user.id,
+            first_name: firstName, 
+            last_name: lastName 
+          })
+          .select();
+
+        if (newPatientError) {
+          console.error("Error creating new patient:", newPatientError);
+          throw newPatientError;
+        }
+        patientId = newPatient[0].id;
+        console.log("Created new patient with ID:", patientId);
+      }
+
+      // Add new visit
+      console.log("Adding new visit for patient ID:", patientId);
+      const { data: newVisitData, error: visitError } = await supabase
+        .from('visits')
+        .insert({ patient_id: patientId, date, photos })
+        .select();
+
+      if (visitError) {
+        console.error("Error adding new visit:", visitError);
+        throw visitError;
+      }
+
+      console.log("Successfully added new visit:", newVisitData);
 
       setNewVisit({ firstName: '', lastName: '', date: '', photos: [] });
       setRefreshTrigger(prev => prev + 1);
     } catch (error) {
-      console.error("Errore nell'aggiunta della visita:", error);
+      console.error("Error adding visit:", error);
+      // Here you might want to show an error message to the user
+    } finally {
+      setIsAddingVisit(false);
     }
   };
 
@@ -217,19 +324,20 @@ const PatientVisitApp: React.FC = () => {
   const updateVisit = async () => {
     if (selectedPatient && selectedVisit) {
       try {
-        const updatedPatient = { ...selectedPatient };
-        updatedPatient.visits = updatedPatient.visits.map(visit => 
-          visit.date === selectedVisit.date ? selectedVisit : visit
-        );
+        const { error } = await supabase
+          .from('visits')
+          .update({ date: selectedVisit.date, photos: selectedVisit.photos })
+          .match({ id: selectedVisit.id });
 
-        await db.patients.put(updatedPatient);
+        if (error) throw error;
 
-        setPatients(prev => prev.map(p => p.id === updatedPatient.id ? updatedPatient : p));
+        setRefreshTrigger(prev => prev + 1);
         setIsEditMode(false);
         setSelectedVisit(null);
         setSelectedPatient(null);
       } catch (error) {
-        console.error("Errore nell'aggiornamento della visita:", error);
+        console.error("Error updating visit:", error);
+        // Here you might want to show an error message to the user
       }
     }
   };
@@ -255,16 +363,19 @@ const PatientVisitApp: React.FC = () => {
 
   const deleteVisit = async (patientId: number, visitDate: string) => {
     try {
-      const patient = patients.find(p => p.id === patientId);
-      if (patient) {
-        patient.visits = patient.visits.filter(v => v.date !== visitDate);
-        await db.patients.put(patient);
-        setPatients(prev => prev.map(p => p.id === patientId ? patient : p));
-        setSelectedVisit(null);
-        setIsEditMode(false);
-      }
+      const { error } = await supabase
+        .from('visits')
+        .delete()
+        .match({ patient_id: patientId, date: visitDate });
+
+      if (error) throw error;
+
+      setRefreshTrigger(prev => prev + 1);
+      setSelectedVisit(null);
+      setIsEditMode(false);
     } catch (error) {
-      console.error("Errore nell'eliminazione della visita:", error);
+      console.error("Error deleting visit:", error);
+      // Here you might want to show an error message to the user
     }
   };
 
@@ -305,13 +416,12 @@ const PatientVisitApp: React.FC = () => {
     registerServiceWorker();
   }, []);
 
-
   useEffect(() => {
     const checkForOldVisits = async () => {
       patients.forEach(patient => {
         const { isOld, lastVisitDate } = isLastVisitOld(patient.visits);
         if (isOld && lastVisitDate) {
-          sendNotification(`${patient.firstName} ${patient.lastName}`, lastVisitDate);
+          sendNotification(`${patient.first_name} ${patient.last_name}`, lastVisitDate);
         }
       });
     };
@@ -319,7 +429,30 @@ const PatientVisitApp: React.FC = () => {
     checkForOldVisits();
   }, [patients, sendNotification]);
 
-  const togglePatientExpansion = (patientId: number) => {
+  // Fetch user session
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (session) {
+        setUser(session.user);
+      } 
+      else {
+        // If no user is logged in, redirect to login
+        router.push('/login');
+      }
+    };
+
+    fetchUser();
+  }, [router]);
+
+  // Logout function
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login'); // Redirect to login page after logout
+  };
+  
+    const togglePatientExpansion = (patientId: number) => {
     setExpandedPatients(prev => {
       const newSet = new Set(prev);
       if (newSet.has(patientId)) {
@@ -335,6 +468,14 @@ const PatientVisitApp: React.FC = () => {
     <div className="max-w-4xl mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">Registro Visite Pazienti</h1>
       
+      {/* Display User Info */}
+      <div className="fixed top-0 left-0 right-0 bg-gray-800 text-white p-4 flex justify-between items-center">
+      <p>Logged in as: {user?.email}</p>
+        <button onClick={handleLogout} className="bg-red-500 px-4 py-2 rounded">
+          Logout
+        </button>
+      </div>
+  
       <Card className="mb-4">
         <CardHeader>
           <CardTitle>Aggiungi Nuova Visita</CardTitle>
@@ -406,7 +547,20 @@ const PatientVisitApp: React.FC = () => {
                 </div>
               ))}
             </div>
-            <Button onClick={addVisit} className="w-full">Aggiungi Visita</Button>
+            <Button 
+              onClick={addVisit} 
+              className="w-full" 
+              disabled={isAddingVisit}
+            >
+              {isAddingVisit ? (
+                <div className="flex items-center justify-center">
+                  <LoadingSpinnerW />
+                  <span className="ml-2">Aggiungendo...</span>
+                </div>
+              ) : (
+                'Aggiungi Visita'
+              )}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -415,21 +569,26 @@ const PatientVisitApp: React.FC = () => {
         <CardHeader>
           <CardTitle>Pazienti e Visite</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="relative">
+          {localLoading && (
+            <div className="absolute inset-0 bg-white bg-opacity-70 flex items-center justify-center z-10">
+              <LoadingSpinner />
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>
                   <th className="text-left p-2">
-                    <Button variant="ghost" onClick={() => handleSort('lastName')}>
+                    <Button variant="ghost" onClick={() => handleSort('last_name')}>
                       Cognome
-                      {sortField === 'lastName' && (sortDirection === 'asc' ? <ChevronUp className="inline ml-1" /> : <ChevronDown className="inline ml-1" />)}
+                      {sortField === 'last_name' && (sortDirection === 'asc' ? <ChevronUp className="inline ml-1" /> : <ChevronDown className="inline ml-1" />)}
                     </Button>
                   </th>
                   <th className="text-left p-2">
-                    <Button variant="ghost" onClick={() => handleSort('firstName')}>
+                    <Button variant="ghost" onClick={() => handleSort('first_name')}>
                       Nome
-                      {sortField === 'firstName' && (sortDirection === 'asc' ? <ChevronUp className="inline ml-1" /> : <ChevronDown className="inline ml-1" />)}
+                      {sortField === 'first_name' && (sortDirection === 'asc' ? <ChevronUp className="inline ml-1" /> : <ChevronDown className="inline ml-1" />)}
                     </Button>
                   </th>
                   <th className="text-left p-2">Visite</th>
@@ -443,7 +602,7 @@ const PatientVisitApp: React.FC = () => {
                     <React.Fragment key={patient.id}>
                       <tr>
                         <td className="p-2">
-                          {patient.lastName}
+                          {patient.last_name}
                           {isOld && lastVisitDate && (
                             <TooltipProvider>
                               <Tooltip>
@@ -458,7 +617,7 @@ const PatientVisitApp: React.FC = () => {
                             </TooltipProvider>
                           )}
                         </td>
-                        <td className="p-2">{patient.firstName}</td>
+                        <td className="p-2">{patient.first_name}</td>
                         <td className="p-2">{patient.visits.length}</td>
                       <td className="p-2 flex items-center space-x-2">
                         <Button variant="outline" onClick={() => togglePatientExpansion(patient.id!)}>
@@ -508,7 +667,7 @@ const PatientVisitApp: React.FC = () => {
                               </DialogHeader>
                               {selectedPatient && selectedVisit && (
                                 <div>
-                                  <p><strong>Paziente:</strong> {selectedPatient.lastName} {selectedPatient.firstName}</p>
+                                  <p><strong>Paziente:</strong> {selectedPatient.last_name} {selectedPatient.first_name}</p>
                                   {isEditMode ? (
                                     <Input
                                       type="date"
