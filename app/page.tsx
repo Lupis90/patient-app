@@ -8,8 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import Image from 'next/image';
-import Dexie from 'dexie';
 import GooglePhotosSelector from '@/components/GooglePhotosSelector';
+import { supabase } from '@/lib/supabaseClient';
+import { PostgrestError } from '@supabase/supabase-js';
 
 interface Photo {
   name: string;
@@ -19,34 +20,22 @@ interface Photo {
 
 interface Visit {
   id?: number;
+  patient_id: number;
   date: string;
   photos: Photo[];
 }
 
 interface Patient {
   id?: number;
-  firstName: string;
-  lastName: string;
+  first_name: string;
+  last_name: string;
   visits: Visit[];
 }
-
-class PatientVisitsDB extends Dexie {
-  patients!: Dexie.Table<Patient, number>;
-
-  constructor() {
-    super('PatientVisitsDB');
-    this.version(3).stores({
-      patients: '++id, firstName, lastName'
-    });
-  }
-}
-
-const db = new PatientVisitsDB();
 
 const PatientVisitApp: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [newVisit, setNewVisit] = useState<{ firstName: string; lastName: string; date: string; photos: Photo[] }>({ firstName: '', lastName: '', date: '', photos: [] });
-  const [sortField, setSortField] = useState<keyof Patient>('lastName');
+  const [sortField, setSortField] = useState<keyof Patient>('last_name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
@@ -57,31 +46,69 @@ const PatientVisitApp: React.FC = () => {
 
   useEffect(() => {
     const loadPatients = async () => {
-      const allPatients = await db.patients.toArray();
-      setPatients(allPatients);
+      try {
+        const { data: patientsData, error: patientsError } = await supabase
+          .from('patients')
+          .select('*');
+
+        if (patientsError) throw patientsError;
+
+        const { data: visitsData, error: visitsError } = await supabase
+          .from('visits')
+          .select('*');
+
+        if (visitsError) throw visitsError;
+
+        const patientsWithVisits = patientsData.map((patient: Patient) => ({
+          ...patient,
+          visits: visitsData.filter((visit: Visit) => visit.patient_id === patient.id)
+        }));
+
+        setPatients(patientsWithVisits);
+      } catch (error) {
+        console.error("Error loading data:", error);
+        // Here you might want to set an error state and display it to the user
+      }
     };
     loadPatients();
   }, [refreshTrigger]);
 
   const mainDeleteVisit = async (patientId: number, visitDate: string) => {
     try {
-      const patient = patients.find(p => p.id === patientId);
-      if (patient) {
-        patient.visits = patient.visits.filter(v => v.date !== visitDate);
-        await db.patients.put(patient);
-        setRefreshTrigger(prev => prev + 1);
-      }
+      const { error } = await supabase
+        .from('visits')
+        .delete()
+        .match({ patient_id: patientId, date: visitDate });
+
+      if (error) throw error;
+
+      setRefreshTrigger(prev => prev + 1);
     } catch (error) {
-      console.error("Errore nell'eliminazione della visita:", error);
+      console.error("Error deleting visit:", error);
+      // Here you might want to show an error message to the user
     }
   };
 
   const deletePatient = async (patientId: number) => {
     try {
-      await db.patients.delete(patientId);
+      const { error: visitsError } = await supabase
+        .from('visits')
+        .delete()
+        .match({ patient_id: patientId });
+
+      if (visitsError) throw visitsError;
+
+      const { error: patientError } = await supabase
+        .from('patients')
+        .delete()
+        .match({ id: patientId });
+
+      if (patientError) throw patientError;
+
       setRefreshTrigger(prev => prev + 1);
     } catch (error) {
-      console.error("Errore nell'eliminazione del paziente:", error);
+      console.error("Error deleting patient:", error);
+      // Here you might want to show an error message to the user
     }
   };
 
@@ -144,8 +171,7 @@ const PatientVisitApp: React.FC = () => {
             if (prev) {
               return { ...prev, photos: [...prev.photos, ...photoData] };
             }
-            // If prev is null, return a new Visit object
-            return { date: '', photos: photoData };
+            return { patient_id: 0, date: '', photos: photoData };
           });
         } else {
           setNewVisit(prev => ({ ...prev, photos: [...prev.photos, ...photoData] }));
@@ -164,7 +190,7 @@ const PatientVisitApp: React.FC = () => {
         if (prev) {
           return { ...prev, photos: [...prev.photos, ...photoData] };
         }
-                return { date: '', photos: photoData };
+        return { patient_id: 0, date: '', photos: photoData };
       });
     } else {
       setNewVisit(prev => ({ ...prev, photos: [...prev.photos, ...photoData] }));
@@ -181,7 +207,7 @@ const PatientVisitApp: React.FC = () => {
             photos: prev.photos.filter((_, i) => i !== index)
           };
         }
-            return { date: '', photos: [] };
+        return { patient_id: 0, date: '', photos: [] };
       });
     } else {
       setNewVisit(prev => ({
@@ -190,46 +216,67 @@ const PatientVisitApp: React.FC = () => {
       }));
     }
   };
+
   const addVisit = async () => {
     try {
       const { firstName, lastName, date, photos } = newVisit;
-      let patient = patients.find(p => p.firstName === firstName && p.lastName === lastName);
       
-      if (!patient) {
-        patient = { firstName, lastName, visits: [] };
-        const id = await db.patients.add(patient);
-        patient.id = id;
+      // Check if patient exists
+      let { data: existingPatients, error: patientError } = await supabase
+        .from('patients')
+        .select('id')
+        .eq('first_name', firstName)
+        .eq('last_name', lastName);
+
+      if (patientError) throw patientError;
+
+      let patientId;
+
+      if (existingPatients && existingPatients.length > 0) {
+        patientId = existingPatients[0].id;
+      } else {
+        // Create new patient
+        const { data: newPatient, error: newPatientError } = await supabase
+          .from('patients')
+          .insert({ first_name: firstName, last_name: lastName })
+          .select();
+
+        if (newPatientError) throw newPatientError;
+        patientId = newPatient[0].id;
       }
 
-      const newVisitObj: Visit = { date, photos };
-      patient.visits.push(newVisitObj);
+      // Add new visit
+      const { error: visitError } = await supabase
+        .from('visits')
+        .insert({ patient_id: patientId, date, photos });
 
-      await db.patients.put(patient);
+      if (visitError) throw visitError;
 
       setNewVisit({ firstName: '', lastName: '', date: '', photos: [] });
       setRefreshTrigger(prev => prev + 1);
     } catch (error) {
-      console.error("Errore nell'aggiunta della visita:", error);
+      console.error("Error adding visit:", error);
+      // Here you might want to show an error message to the user
     }
   };
-
 
   const updateVisit = async () => {
     if (selectedPatient && selectedVisit) {
       try {
-        const updatedPatient = { ...selectedPatient };
-        updatedPatient.visits = updatedPatient.visits.map(visit => 
-          visit.date === selectedVisit.date ? selectedVisit : visit
-        );
+        const { error } = await supabase
+          .from('visits')
+          .update({ date: selectedVisit.date, photos: selectedVisit.photos })
+          .match({ id: selectedVisit.id });
 
-        await db.patients.put(updatedPatient);
+        if (error) throw error;
 
-        setPatients(prev => prev.map(p => p.id === updatedPatient.id ? updatedPatient : p));
+        setRefreshTrigger(prev => prev + 1);
         setIsEditMode(false);
         setSelectedVisit(null);
         setSelectedPatient(null);
       } catch (error) {
-        console.error("Errore nell'aggiornamento della visita:", error);
+        console.error("Error updating visit:", error);
+        // Here you might want to show an error message to the user
       }
     }
   };
@@ -255,16 +302,19 @@ const PatientVisitApp: React.FC = () => {
 
   const deleteVisit = async (patientId: number, visitDate: string) => {
     try {
-      const patient = patients.find(p => p.id === patientId);
-      if (patient) {
-        patient.visits = patient.visits.filter(v => v.date !== visitDate);
-        await db.patients.put(patient);
-        setPatients(prev => prev.map(p => p.id === patientId ? patient : p));
-        setSelectedVisit(null);
-        setIsEditMode(false);
-      }
+      const { error } = await supabase
+        .from('visits')
+        .delete()
+        .match({ patient_id: patientId, date: visitDate });
+
+      if (error) throw error;
+
+      setRefreshTrigger(prev => prev + 1);
+      setSelectedVisit(null);
+      setIsEditMode(false);
     } catch (error) {
-      console.error("Errore nell'eliminazione della visita:", error);
+      console.error("Error deleting visit:", error);
+      // Here you might want to show an error message to the user
     }
   };
 
@@ -305,13 +355,12 @@ const PatientVisitApp: React.FC = () => {
     registerServiceWorker();
   }, []);
 
-
   useEffect(() => {
     const checkForOldVisits = async () => {
       patients.forEach(patient => {
         const { isOld, lastVisitDate } = isLastVisitOld(patient.visits);
         if (isOld && lastVisitDate) {
-          sendNotification(`${patient.firstName} ${patient.lastName}`, lastVisitDate);
+          sendNotification(`${patient.first_name} ${patient.last_name}`, lastVisitDate);
         }
       });
     };
@@ -421,15 +470,15 @@ const PatientVisitApp: React.FC = () => {
               <thead>
                 <tr>
                   <th className="text-left p-2">
-                    <Button variant="ghost" onClick={() => handleSort('lastName')}>
+                    <Button variant="ghost" onClick={() => handleSort('last_name')}>
                       Cognome
-                      {sortField === 'lastName' && (sortDirection === 'asc' ? <ChevronUp className="inline ml-1" /> : <ChevronDown className="inline ml-1" />)}
+                      {sortField === 'last_name' && (sortDirection === 'asc' ? <ChevronUp className="inline ml-1" /> : <ChevronDown className="inline ml-1" />)}
                     </Button>
                   </th>
                   <th className="text-left p-2">
-                    <Button variant="ghost" onClick={() => handleSort('firstName')}>
+                    <Button variant="ghost" onClick={() => handleSort('first_name')}>
                       Nome
-                      {sortField === 'firstName' && (sortDirection === 'asc' ? <ChevronUp className="inline ml-1" /> : <ChevronDown className="inline ml-1" />)}
+                      {sortField === 'first_name' && (sortDirection === 'asc' ? <ChevronUp className="inline ml-1" /> : <ChevronDown className="inline ml-1" />)}
                     </Button>
                   </th>
                   <th className="text-left p-2">Visite</th>
@@ -443,7 +492,7 @@ const PatientVisitApp: React.FC = () => {
                     <React.Fragment key={patient.id}>
                       <tr>
                         <td className="p-2">
-                          {patient.lastName}
+                          {patient.last_name}
                           {isOld && lastVisitDate && (
                             <TooltipProvider>
                               <Tooltip>
@@ -458,7 +507,7 @@ const PatientVisitApp: React.FC = () => {
                             </TooltipProvider>
                           )}
                         </td>
-                        <td className="p-2">{patient.firstName}</td>
+                        <td className="p-2">{patient.first_name}</td>
                         <td className="p-2">{patient.visits.length}</td>
                       <td className="p-2 flex items-center space-x-2">
                         <Button variant="outline" onClick={() => togglePatientExpansion(patient.id!)}>
@@ -508,7 +557,7 @@ const PatientVisitApp: React.FC = () => {
                               </DialogHeader>
                               {selectedPatient && selectedVisit && (
                                 <div>
-                                  <p><strong>Paziente:</strong> {selectedPatient.lastName} {selectedPatient.firstName}</p>
+                                  <p><strong>Paziente:</strong> {selectedPatient.last_name} {selectedPatient.first_name}</p>
                                   {isEditMode ? (
                                     <Input
                                       type="date"
