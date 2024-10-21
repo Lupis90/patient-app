@@ -8,8 +8,7 @@ import { AddVisitForm } from './components/AddVisitForm';
 import { PatientsList } from './components/PatientsList';
 import { VisitDetails } from './components/VisitDetails';
 import { registerServiceWorker, sendNotification, isLastVisitOld } from './utils/helperFunctions';
-import { Patient, Visit, Photo } from './types';
-
+import { Patient, Photo } from './types';
 
 const PatientVisitApp: React.FC = () => {
   const router = useRouter();
@@ -31,7 +30,6 @@ const PatientVisitApp: React.FC = () => {
     setIsEditMode,
     expandedPatients,
     setExpandedPatients,
-    refreshTrigger,
     setRefreshTrigger,
     localLoading,
     setLocalLoading,
@@ -76,7 +74,7 @@ const PatientVisitApp: React.FC = () => {
 
   useEffect(() => {
     setLocalLoading(operationInProgress);
-  }, [operationInProgress]);
+  }, [operationInProgress, setLocalLoading]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
